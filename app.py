@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-import os
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="서울 연평균 기온 예측기", layout="wide")
@@ -11,7 +10,6 @@ st.set_page_config(page_title="서울 연평균 기온 예측기", layout="wide"
 # Matplotlib 한글 폰트 설정
 @st.cache_resource
 def setup_font():
-    # 리눅스/윈도우/맥 한글 폰트 설정
     font_list = [f.name for f in fm.fontManager.ttflist]
     if 'NanumGothic' in font_list:
         plt.rc('font', family='NanumGothic')
@@ -20,13 +18,12 @@ def setup_font():
     elif 'AppleGothic' in font_list:
         plt.rc('font', family='AppleGothic')
     else:
-        # 폰트가 없는 경우를 대비한 시스템 폰트 설정
         plt.rcParams['font.family'] = 'sans-serif'
     plt.rcParams['axes.unicode_minus'] = False
 
 setup_font()
 
-# 커스텀 CSS (이미지 스타일의 아이보리 톤 및 카드 디자인 반영)
+# 커스텀 CSS (unsafe_allow_html=True 로 수정)
 st.markdown("""
 <style>
     .stApp {
@@ -40,7 +37,7 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.03);
     }
 </style>
-""", unsafe_allow_html=unsafe_allow_html)
+""", unsafe_allow_html=True)
 
 st.title("🌡️ 서울 연평균 기온 예측기")
 
@@ -128,7 +125,7 @@ try:
     # 예측 연도의 기온
     predicted_temp = a * target_year + b
     
-    # --- 그래프 그리기 (이미지 디자인 스타일 재현) ---
+    # --- 그래프 그리기 ---
     fig, ax = plt.subplots(figsize=(12, 6), facecolor='#f3efe0')
     ax.set_facecolor('#f3efe0')
     
@@ -159,20 +156,19 @@ try:
         y_extrap = a * x_extrap + b
         ax.plot(x_extrap, y_extrap, color='#1976d2', linestyle='--', linewidth=2, label='외삽', zorder=4)
 
-    # 5. 예측 지점 강조 표시 (원형 마커)
+    # 5. 예측 지점 강조 표시
     ax.scatter([target_year], [predicted_temp], facecolors='none', edgecolors='#af7a15', 
                s=120, linewidth=2.5, zorder=5)
     ax.text(target_year, predicted_temp + 0.35, f"{predicted_temp:.1f}°C", 
             color='#af7a15', fontweight='bold', fontsize=11, ha='center')
 
-    # 6. 상단 요약 툴팁 박스 (이미지의 정보 창)
+    # 6. 상단 요약 툴팁 박스
     info_text = (
         f"학습 {num_train_years}개 해 ({start_year}~{max_year_all})\n"
         f"기울기 +{slope_100y:.2f}°C/100년\n"
         f"{target_year}년 {predicted_temp:.1f}°C"
     )
     
-    # 박스 위치 설정 (그래프 상단 중앙)
     mid_x = (min_year_all + max(target_year, max_year_all)) / 2
     max_y = max(all_data['연평균기온'].max(), predicted_temp) + 1.2
     
@@ -205,4 +201,5 @@ try:
     st.markdown('</div>', unsafe_allow_html=True)
 
 except Exception as e:
+    st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
     st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
