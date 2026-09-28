@@ -23,7 +23,7 @@ def setup_font():
 
 setup_font()
 
-# 커스텀 CSS (unsafe_allow_html=True 로 수정)
+# 커스텀 CSS
 st.markdown("""
 <style>
     .stApp {
@@ -35,6 +35,14 @@ st.markdown("""
         padding: 24px;
         border: 1px solid #e2dac7;
         box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+    .info-box {
+        background-color: white;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #e0e0e0;
+        text-align: center;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -125,8 +133,17 @@ try:
     # 예측 연도의 기온
     predicted_temp = a * target_year + b
     
+    # --- 요약 정보를 Streamlit metric 카드로 표시 (그래프 위 텍스트 박스 대체) ---
+    st.markdown(f"""
+    <div class="info-box">
+        <span style="font-size: 16px; color: #444;">학습 <b>{num_train_years}개 해</b> ({start_year}~{max_year_all}) &nbsp;|&nbsp; </span>
+        <span style="font-size: 16px; color: #1976d2;">기울기 <b>+{slope_100y:.2f}°C / 100년</b> &nbsp;|&nbsp; </span>
+        <span style="font-size: 18px; color: #af7a15; font-weight: bold;">{target_year}년 예상 기온: {predicted_temp:.1f}°C</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # --- 그래프 그리기 ---
-    fig, ax = plt.subplots(figsize=(12, 6), facecolor='#f3efe0')
+    fig, ax = plt.subplots(figsize=(12, 5.5), facecolor='#f3efe0')
     ax.set_facecolor('#f3efe0')
     
     # 배경 영역 표시 (학습 구간)
@@ -156,29 +173,15 @@ try:
         y_extrap = a * x_extrap + b
         ax.plot(x_extrap, y_extrap, color='#1976d2', linestyle='--', linewidth=2, label='외삽', zorder=4)
 
-    # 5. 예측 지점 강조 표시
+    # 5. 예측 지점 강조 표시 (그래프 위 숫자 표시는 영문/기호 기반으로 안전하게 표시)
     ax.scatter([target_year], [predicted_temp], facecolors='none', edgecolors='#af7a15', 
                s=120, linewidth=2.5, zorder=5)
     ax.text(target_year, predicted_temp + 0.35, f"{predicted_temp:.1f}°C", 
             color='#af7a15', fontweight='bold', fontsize=11, ha='center')
 
-    # 6. 상단 요약 툴팁 박스
-    info_text = (
-        f"학습 {num_train_years}개 해 ({start_year}~{max_year_all})\n"
-        f"기울기 +{slope_100y:.2f}°C/100년\n"
-        f"{target_year}년 {predicted_temp:.1f}°C"
-    )
-    
-    mid_x = (min_year_all + max(target_year, max_year_all)) / 2
-    max_y = max(all_data['연평균기온'].max(), predicted_temp) + 1.2
-    
-    ax.text(mid_x, max_y - 0.5, info_text, fontsize=11, verticalalignment='top', horizontalalignment='center',
-            bbox=dict(boxstyle='round,pad=0.8', facecolor='white', edgecolor='#e0e0e0', alpha=0.95),
-            color='#333333', linespacing=1.5)
-
-    # 축 스타일링
+    # 축 스타일링 (영문/기호 기반 축 레이블 설정으로 깨짐 방지)
     ax.set_ylabel("°C", fontsize=12, rotation=0, loc='top', color='#555555')
-    ax.set_xlabel("연도", fontsize=11, loc='right', color='#555555')
+    ax.set_xlabel("Year", fontsize=11, loc='right', color='#555555')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#b0bec5')
@@ -201,5 +204,4 @@ try:
     st.markdown('</div>', unsafe_allow_html=True)
 
 except Exception as e:
-    st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
     st.error(f"데이터 처리 중 오류가 발생했습니다: {e}")
