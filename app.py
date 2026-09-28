@@ -3,46 +3,55 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
+import urllib.request
+import os
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="서울 연평균 기온 예측기", layout="wide")
 
-# Matplotlib 한글 폰트 설정
+# --- 한글 폰트 자동 설정 (리눅스 / Streamlit Cloud / Windows / Mac 완벽 대응) ---
 @st.cache_resource
-def setup_font():
-    font_list = [f.name for f in fm.fontManager.ttflist]
-    if 'NanumGothic' in font_list:
-        plt.rc('font', family='NanumGothic')
-    elif 'Malgun Gothic' in font_list:
-        plt.rc('font', family='Malgun Gothic')
-    elif 'AppleGothic' in font_list:
-        plt.rc('font', family='AppleGothic')
+def setup_korean_font():
+    # 1. 나눔고딕 폰트 파일 다운로드 및 적용 (Streamlit Cloud 환경 대응)
+    font_path = "NanumGothic.ttf"
+    if not os.path.exists(font_path):
+        url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+        try:
+            urllib.request.urlretrieve(url, font_path)
+        except Exception:
+            pass
+
+    if os.path.exists(font_path):
+        fm.fontManager.addfont(font_path)
+        plt.rc('font', family='Nanum Gothic')
     else:
-        plt.rcParams['font.family'] = 'sans-serif'
+        # 시스템 폰트 확인
+        font_names = [f.name for f in fm.fontManager.ttflist]
+        if 'NanumGothic' in font_names:
+            plt.rc('font', family='NanumGothic')
+        elif 'Malgun Gothic' in font_names:
+            plt.rc('font', family='Malgun Gothic')
+        elif 'AppleGothic' in font_names:
+            plt.rc('font', family='AppleGothic')
+        else:
+            plt.rc('font', family='DejaVu Sans')
+
     plt.rcParams['axes.unicode_minus'] = False
 
-setup_font()
+setup_korean_font()
 
-# 커스텀 CSS
+# 커스텀 CSS (이미지 디자인 색상 및 부드러운 라운드 카드)
 st.markdown("""
 <style>
     .stApp {
-        background-color: #f7f5ed;
+        background-color: #fcfbf7;
     }
     .main-card {
-        background-color: #f3efe0;
-        border-radius: 16px;
+        background-color: #f7f5ed;
+        border-radius: 20px;
         padding: 24px;
-        border: 1px solid #e2dac7;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-    }
-    .info-box {
-        background-color: white;
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid #e0e0e0;
-        text-align: center;
-        margin-bottom: 20px;
+        border: 1px solid #e8e3d5;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.02);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -61,7 +70,6 @@ def load_and_process_data():
     # 2025년 이하 데이터만 필터링
     df = df[df['연도'] <= 2025]
     
-    # 연도별 관측일수 및 연평균기온 계산
     yearly_stats = df.groupby('연도').agg(
         관측일수=('평균기온', 'count'),
         연평균기온=('평균기온', 'mean')
@@ -79,128 +87,104 @@ try:
     
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     
-    # --- 상단 설정 및 컨트롤 영역 ---
-    col_preset, col_slider, col_target = st.columns([2, 3, 2])
+    # --- 회귀선 계산 (전체 데이터 기반 기본값) ---
+    x_train = all_data['연도'].values
+    y_train = all_data['연평균기온'].values
+    a, b = np.polyfit(x_train, y_train, 1)
+    slope_100y = a * 100
+
+    # --- 그래프 그리기 ---
+    fig, ax = plt.subplots(figsize=(12, 5.8), facecolor='#f7f5ed')
+    ax.set_facecolor('#f7f5ed')
+
+    # 1. 2025년 이후 "확인할 데이터 없음" 미래 영역 음영 처리
+    ax.axvspan(2025, 2100, color='#eeebe3', alpha=0.8, zorder=1)
+    ax.text(2070, 10.0, "확인할\n데이터 없음", fontsize=11, color='#888479', 
+            ha='center', va='center', zorder=2, multialignment='center')
+
+    # 2. 실선 회귀선 (1908~2025) 및 점선 외삽선 (2025~2100)
+    x_fit = np.linspace(min_year_all, 2025, 100)
+    y_fit = a * x_fit + b
+    ax.plot(x_fit, y_fit, color='#3b82f6', linewidth=2.2, zorder=3)
+
+    x_extrap = np.linspace(2025, 2100, 100)
+    y_extrap = a * x_extrap + b
+    ax.plot(x_extrap, y_extrap, color='#3b82f6', linestyle='--', linewidth=2, zorder=3)
+
+    # 3. 데이터 산점도 (학습 데이터)
+    ax.scatter(all_data['연도'], all_data['연평균기온'], 
+               color='#70a5e6', s=35, alpha=0.85, zorder=4)
+
+    # --- 컨트롤 영역 (슬라이더 및 빠르게 고르기) ---
+    col_slider, col_btn1, col_btn2, col_btn3, col_result = st.columns([4, 1.2, 1.2, 1.2, 3])
     
-    with col_preset:
-        st.write("**학습 시작 연도 빠른 선택**")
-        preset = st.radio(
-            "학습 범위 버튼",
-            ["전체", "최근 50년", "최근 30년", "최근 20년"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-        
-        if preset == "전체":
-            default_start = min_year_all
-        elif preset == "최근 50년":
-            default_start = max_year_all - 50 + 1
-        elif preset == "최근 30년":
-            default_start = max_year_all - 30 + 1
-        elif preset == "최근 20년":
-            default_start = max_year_all - 20 + 1
+    # 기본값 설정
+    if "target_year" not in st.session_state:
+        st.session_state.target_year = 2045
+
+    with col_btn1:
+        if st.button("2025년", use_container_width=True):
+            st.session_state.target_year = 2025
+    with col_btn2:
+        if st.button("2045년", use_container_width=True):
+            st.session_state.target_year = 2045
+    with col_btn3:
+        if st.button("2100년", use_container_width=True):
+            st.session_state.target_year = 2100
 
     with col_slider:
-        start_year = st.slider(
-            "학습 시작 연도",
-            min_value=min_year_all,
-            max_value=max_year_all - 5,
-            value=default_start
-        )
-
-    with col_target:
         target_year = st.slider(
-            "예측 대상 연도",
+            "연도",
             min_value=1900,
             max_value=2100,
-            value=2045
+            value=st.session_state.target_year,
+            key="slider_year"
         )
+        st.session_state.target_year = target_year
 
-    # --- 데이터 분리 및 회귀 계산 ---
-    train_data = all_data[all_data['연도'] >= start_year]
-    excluded_data = all_data[all_data['연도'] < start_year]
-    
-    num_train_years = len(train_data)
-    
-    # 회귀 계산 (y = ax + b)
-    x_train = train_data['연도'].values
-    y_train = train_data['연평균기온'].values
-    a, b = np.polyfit(x_train, y_train, 1)
-    
-    # 100년당 기온 상승률 (°C/100년)
-    slope_100y = a * 100
-    
-    # 예측 연도의 기온
     predicted_temp = a * target_year + b
-    
-    # --- 요약 정보를 Streamlit metric 카드로 표시 (그래프 위 텍스트 박스 대체) ---
-    st.markdown(f"""
-    <div class="info-box">
-        <span style="font-size: 16px; color: #444;">학습 <b>{num_train_years}개 해</b> ({start_year}~{max_year_all}) &nbsp;|&nbsp; </span>
-        <span style="font-size: 16px; color: #1976d2;">기울기 <b>+{slope_100y:.2f}°C / 100년</b> &nbsp;|&nbsp; </span>
-        <span style="font-size: 18px; color: #af7a15; font-weight: bold;">{target_year}년 예상 기온: {predicted_temp:.1f}°C</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # --- 그래프 그리기 ---
-    fig, ax = plt.subplots(figsize=(12, 5.5), facecolor='#f3efe0')
-    ax.set_facecolor('#f3efe0')
-    
-    # 배경 영역 표시 (학습 구간)
-    ax.axvspan(start_year, max_year_all, color='#e5f0f7', alpha=0.5, zorder=1)
-    
-    # 1. 학습 제외 데이터
-    if len(excluded_data) > 0:
-        ax.scatter(excluded_data['연도'], excluded_data['연평균기온'], 
-                   color='#b0bec5', s=30, alpha=0.7, label='학습 제외', zorder=2)
-        
-    # 2. 학습 데이터
-    ax.scatter(train_data['연도'], train_data['연평균기온'], 
-               color='#64b5f6', s=45, alpha=0.9, label='학습 데이터', zorder=3)
-    
-    # 3. 실선 회귀선 (학습 구간)
-    x_fit = np.linspace(start_year, max_year_all, 100)
-    y_fit = a * x_fit + b
-    ax.plot(x_fit, y_fit, color='#1976d2', linewidth=2.5, label='회귀선', zorder=4)
-    
-    # 4. 점선 외삽선 (예측 연도까지)
-    if target_year > max_year_all:
-        x_extrap = np.linspace(max_year_all, target_year, 100)
-        y_extrap = a * x_extrap + b
-        ax.plot(x_extrap, y_extrap, color='#1976d2', linestyle='--', linewidth=2, label='외삽', zorder=4)
-    elif target_year < start_year:
-        x_extrap = np.linspace(target_year, start_year, 100)
-        y_extrap = a * x_extrap + b
-        ax.plot(x_extrap, y_extrap, color='#1976d2', linestyle='--', linewidth=2, label='외삽', zorder=4)
 
-    # 5. 예측 지점 강조 표시 (그래프 위 숫자 표시는 영문/기호 기반으로 안전하게 표시)
-    ax.scatter([target_year], [predicted_temp], facecolors='none', edgecolors='#af7a15', 
-               s=120, linewidth=2.5, zorder=5)
-    ax.text(target_year, predicted_temp + 0.35, f"{predicted_temp:.1f}°C", 
-            color='#af7a15', fontweight='bold', fontsize=11, ha='center')
+    # 4. 예측 수직 점선 & 선택 포인트 (빨간색 포인트)
+    ax.axvline(target_year, color='#888888', linestyle=':', linewidth=1.5, zorder=5)
+    ax.scatter([target_year], [predicted_temp], color='#ef4444', s=50, zorder=6)
 
-    # 축 스타일링 (영문/기호 기반 축 레이블 설정으로 깨짐 방지)
-    ax.set_ylabel("°C", fontsize=12, rotation=0, loc='top', color='#555555')
-    ax.set_xlabel("Year", fontsize=11, loc='right', color='#555555')
+    # 5. 상단 굵은 예측값 타이틀
+    ax.text(target_year, 17.0, f"{target_year}년 예측 {predicted_temp:.1f}°C", 
+            fontsize=13, fontweight='bold', color='#111111', ha='center', va='bottom', zorder=6)
+
+    # 6. 우측 상단 "외삽" 빨간색 배지 (2025년 초과시 표시)
+    if target_year > 2025:
+        ax.text(2090, 17.2, " 외삽 ", fontsize=11, fontweight='bold', color='white',
+                ha='center', va='center', zorder=7,
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='#ef4444', edgecolor='none'))
+
+    # 7. 그래프 좌측 하단 메타 정보
+    info_sub = f"회귀선 · 학습 데이터 {min_year_all}~{max_year_all} · 기울기 +{slope_100y:.2f}°C/100년"
+    ax.text(1900, 8.2, info_sub, fontsize=10.5, color='#666666', ha='left', va='top')
+
+    # 축 범위 및 스타일 조정
+    ax.set_ylim(9.0, 18.0)
+    ax.set_xlim(1895, 2105)
+    ax.set_ylabel("°C", fontsize=11, rotation=0, loc='top', color='#666666')
+    ax.set_xlabel("연도", fontsize=10.5, loc='right', color='#666666')
+    
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#b0bec5')
-    ax.spines['bottom'].set_color('#b0bec5')
-    ax.grid(True, linestyle=':', alpha=0.5, color='#cccccc')
-    
-    # 범례 설정
-    ax.legend(loc='lower right', frameon=False, fontsize=10, ncol=4)
-    
+    ax.spines['left'].set_color('#cccccc')
+    ax.spines['bottom'].set_color('#cccccc')
+    ax.grid(True, linestyle=':', alpha=0.5, color='#d5d1c5')
+
     st.pyplot(fig)
-    
-    # 하단 텍스트 정보 표시
-    st.markdown(
-        f"<p style='text-align: right; color: #8d6e63; font-weight: bold; font-size: 15px;'>"
-        f"학습 {start_year}~{max_year_all} · 기울기 +{slope_100y:.2f}°C/100년"
-        f"</p>", 
-        unsafe_allow_html=True
-    )
-    
+
+    # 우측 하단 예측 결과 강조 출력
+    with col_result:
+        st.markdown(
+            f"<h4 style='text-align: right; color: #d97706; margin-top: 10px;'>"
+            f"{target_year}년 ➔ 예측값 {predicted_temp:.1f}°C"
+            f"</h4>",
+            unsafe_allow_html=True
+        )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 except Exception as e:
