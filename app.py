@@ -98,7 +98,9 @@ try:
     st.caption("서울의 연평균기온으로 선형회귀 모델을 만들고, 과거 자료로 학습한 모델이 최근 기온을 얼마나 잘 예측하는지 평가합니다.")
     st.markdown("---")
 
+    # ==========================================
     # ① 훈련 데이터와 테스트 데이터
+    # ==========================================
     st.markdown("### ① 훈련 데이터와 테스트 데이터")
 
     test_data = data[(data['연도'] >= 2006) & (data['연도'] <= 2025)].copy()
@@ -131,7 +133,9 @@ try:
 
     st.markdown("---")
 
+    # ==========================================
     # ② 전체 데이터로 만든 회귀모델
+    # ==========================================
     st.markdown("### ② 전체 데이터로 만든 회귀모델")
 
     x_all = data['연도'].values
@@ -178,7 +182,9 @@ try:
 
     st.markdown("---")
 
+    # ==========================================
     # ③ 50년 학습과 100년 학습 비교
+    # ==========================================
     st.markdown("### ③ 50년 학습과 100년 학습 비교")
 
     a_50, b_50 = np.polyfit(train_50y['연도'], train_50y['연평균기온'], 1)
@@ -239,6 +245,67 @@ try:
 
     ax_comp.legend(loc='upper left', frameon=False, fontsize=9)
     st.pyplot(fig_comp)
+
+    st.markdown("---")
+
+    # ==========================================
+    # ④ 테스트 데이터 예측 성능
+    # ==========================================
+    st.markdown("### ④ 테스트 데이터 예측 성능")
+
+    col_p50, col_p100 = st.columns(2)
+
+    with col_p50:
+        st.markdown("🔹 **50년 학습 모델**")
+        p1, p2, p3 = st.columns(3)
+        p1.metric("MAE", f"{mae_50:.3f} °C")
+        p2.metric("MSE", f"{mse_50:.3f}")
+        p3.metric("R²", f"{r2_50:.3f}")
+
+    with col_p100:
+        st.markdown("🔸 **100년 학습 모델**")
+        q1, q2, q3 = st.columns(3)
+        q1.metric("MAE", f"{mae_100:.3f} °C")
+        q2.metric("MSE", f"{mse_100:.3f}")
+        q3.metric("R²", f"{r2_100:.3f}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 모델 요약 비교 표 데이터 생성
+    r_50 = np.corrcoef(train_50y['연도'], train_50y['연평균기온'])[0, 1]
+    r_100 = np.corrcoef(train_100y['연도'], train_100y['연평균기온'])[0, 1]
+
+    summary_df = pd.DataFrame({
+        "모델": ["전체 데이터", "최근 50년 학습", "최근 100년 학습"],
+        "학습 기간": ["1906~2025", "1956~2005", "1906~2005"],
+        "평가 데이터": ["학습 데이터와 동일", "2006~2025", "2006~2025"],
+        "학습 연도 수": [len(data), cnt_50y, cnt_100y],
+        "상관계수 r": [f"{r_corr:.3f}", f"{r_50:.3f}", f"{r_100:.3f}"],
+        "100년당 기온 변화(°C)": [f"{slope_100y_all:.2f}", f"{a_50*100:.2f}", f"{a_100*100:.2f}"],
+        "MAE": [f"{mae_all:.3f}", f"{mae_50:.3f}", f"{mae_100:.3f}"],
+        "MSE": [f"{mse_all:.3f}", f"{mse_50:.3f}", f"{mse_100:.3f}"],
+        "R²": [f"{r2_all:.3f}", f"{r2_50:.3f}", f"{r2_100:.3f}"]
+    })
+
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ==========================================
+    # ⑤ 최근 20년의 실제 기온과 예측 기온
+    # ==========================================
+    st.markdown("### ⑤ 최근 20년의 실제 기온과 예측 기온")
+
+    detail_df = pd.DataFrame({
+        "연도": test_data['연도'].values,
+        "실제 평균기온": np.round(y_test, 2),
+        "50년 학습 모델 예측": np.round(y_pred_50, 2),
+        "100년 모델 예측": np.round(y_pred_100, 2),
+        "50년 모델 오차": np.round(y_test - y_pred_50, 2),
+        "100년 모델 오차": np.round(y_test - y_pred_100, 2)
+    })
+
+    st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error(f"오류가 발생했습니다: {e}")
