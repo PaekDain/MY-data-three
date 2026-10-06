@@ -300,7 +300,7 @@ try:
     st.markdown("---")
 
     # ==========================================
-    # 💡 평가 지표 가이드 (MAE, MSE, R² 통합)
+    # 💡 평가 지표 가이드
     # ==========================================
     st.markdown("### 💡 평가 지표는 어떻게 읽을까?")
     
@@ -333,10 +333,33 @@ try:
     st.markdown("---")
 
     # ==========================================
-    # ⑤ 최근 20년의 실제 기온과 예측 기온
+    # ⑤ 최근 20년의 실제 기온과 예측 기온 (차트 + 표)
     # ==========================================
     st.markdown("### ⑤ 최근 20년의 실제 기온과 예측 기온")
 
+    # 1) 최근 20년 꺾은선 그래프
+    fig_recent, ax_recent = plt.subplots(figsize=(12, 5), facecolor='white')
+    ax_recent.set_facecolor('white')
+
+    ax_recent.plot(x_test, y_test, color='#1d4ed8', marker='s', markersize=4, linewidth=1.8, label='원래 기온')
+    ax_recent.plot(x_test, y_pred_50, color='#60a5fa', marker='o', markersize=4, linewidth=1.5, label='50년 학습 모델 예측')
+    ax_recent.plot(x_test, y_pred_100, color='#dc2626', marker='D', markersize=4, linewidth=1.5, label='100년 학습 모델 예측')
+
+    ax_recent.set_ylabel("연평균기온 (°C)", fontsize=10, color='#666666')
+    ax_recent.set_xlabel("연도", fontsize=10, color='#666666')
+    ax_recent.set_ylim(12.0, 15.0)
+    ax_recent.set_xticks(np.arange(2005, 2026, 5))
+    ax_recent.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
+
+    for spine in ['top', 'right', 'left', 'bottom']:
+        ax_recent.spines[spine].set_color('#f3f4f6')
+
+    ax_recent.legend(loc='upper right', frameon=False, fontsize=9)
+    st.pyplot(fig_recent)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 2) 세부 데이터 표
     detail_df = pd.DataFrame({
         "연도": test_data['연도'].values,
         "실제 평균기온": np.round(y_test, 2),
