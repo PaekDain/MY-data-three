@@ -68,6 +68,14 @@ st.markdown("""
         color: #888888;
         margin-top: -10px;
     }
+    .guide-box {
+        background-color: #f9fafb;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 10px;
+        margin-bottom: 25px;
+        border: 1px solid #f3f4f6;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -271,7 +279,7 @@ try:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 모델 요약 비교 표 데이터 생성
+    # 모델 요약 비교 표
     r_50 = np.corrcoef(train_50y['연도'], train_50y['연평균기온'])[0, 1]
     r_100 = np.corrcoef(train_100y['연도'], train_100y['연평균기온'])[0, 1]
 
@@ -288,6 +296,39 @@ try:
     })
 
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ==========================================
+    # 💡 평가 지표 가이드 (MAE, MSE, R² 통합)
+    # ==========================================
+    st.markdown("### 💡 평가 지표는 어떻게 읽을까?")
+    
+    st.markdown("""
+    <div class="guide-box">
+        <h4 style="margin-top:0; color:#374151;">MAE</h4>
+        <p style="color:#4b5563; margin-bottom:8px;">실제 기온과 예상 기온의 <b>차이의 절대값을 평균</b>한 값입니다.</p>
+        <ul style="color:#6b7280; font-size:14px; margin-bottom:20px; padding-left:20px;">
+            <li>작을수록 좋습니다.</li>
+            <li>단위가 실제 기온과 같은 <b>°C</b>라서 해석하기 쉽습니다.</li>
+        </ul>
+        <h4 style="margin-top:0; color:#374151;">MSE</h4>
+        <p style="color:#4b5563; margin-bottom:8px;">예측 오차를 <b>제곱한 뒤 평균</b>한 값입니다.</p>
+        <ul style="color:#6b7280; font-size:14px; margin-bottom:20px; padding-left:20px;">
+            <li>작을수록 좋습니다.</li>
+            <li>크게 틀린 예측에 더 큰 벌점을 줍니다.</li>
+        </ul>
+        <h4 style="margin-top:0; color:#374151;">R²</h4>
+        <p style="color:#4b5563; margin-bottom:8px;">회귀모델이 실제 데이터의 변화를 얼마나 설명하거나 예측했는지를 나타냅니다.</p>
+        <ul style="color:#6b7280; font-size:14px; margin-bottom:12px; padding-left:20px;">
+            <li>일반적으로 <b>1에 가까울수록 좋습니다.</b></li>
+            <li>테스트 데이터에서는 <b>0보다 작게 나올 수도 있습니다.</b></li>
+        </ul>
+        <p style="color:#6b7280; font-size:13.5px; margin-bottom:0; background-color:#f3f4f6; padding:10px; border-radius:6px;">
+            R²가 음수라면 테스트 데이터에서는 단순히 테스트 데이터의 평균값으로 예측하는 것보다도 회귀모델의 예측이 좋지 않았다라는 의미입니다.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
 
