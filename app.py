@@ -8,7 +8,7 @@ import urllib.request
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Streamlit 페이지 설정
-st.set_page_config(page_title="서울 기온 회귀 모델 평가 및 비교", layout="wide")
+st.set_page_config(page_title="서울 기온 선형회귀 예측기", layout="wide")
 
 # --- 한글 폰트 설정 (폰트 파일 자동 다운로드 및 적용) ---
 @st.cache_resource
@@ -25,7 +25,6 @@ def setup_korean_font():
         fm.fontManager.addfont(font_path)
         plt.rc('font', family='NanumGothic')
     else:
-        # 시스템 기본 한글 폰트 차선책
         font_names = [f.name for f in fm.fontManager.ttflist]
         if 'NanumGothic' in font_names:
             plt.rc('font', family='NanumGothic')
@@ -38,11 +37,21 @@ def setup_korean_font():
 
 setup_korean_font()
 
-# 커스텀 CSS (이미지 스타일의 노란색 경고/안내 박스 디자인 반영)
+# 커스텀 CSS (안내 박스 및 메트릭 레이아웃)
 st.markdown("""
 <style>
     .stApp {
         background-color: #ffffff;
+    }
+    .info-box-blue {
+        background-color: #eff6ff;
+        border-radius: 8px;
+        padding: 16px;
+        color: #1d4ed8;
+        font-size: 14.5px;
+        line-height: 1.6;
+        margin-top: 15px;
+        margin-bottom: 25px;
     }
     .warning-box {
         background-color: #fefde8;
@@ -85,6 +94,47 @@ def load_and_process_data():
 try:
     data = load_and_process_data()
     
+    # 메인 타이틀 & 설명
+    st.title("🌡️ 서울 기온 선형회귀 예측기")
+    st.caption("서울의 연평균기온으로 선형회귀 모델을 만들고, 과거 자료로 학습한 모델이 최근 기온을 얼마나 잘 예측하는지 평가합니다.")
+    st.markdown("---")
+
+    # ==========================================
+    # ① 훈련 데이터와 테스트 데이터
+    # ==========================================
+    st.markdown("### ① 훈련 데이터와 테스트 데이터")
+
+    # 데이터 분할 및 개수 계산
+    test_data = data[(data['연도'] >= 2006) & (data['연도'] <= 2025)].copy()
+    train_50y = data[(data['연도'] >= 1956) & (data['연도'] <= 2005)].copy()
+    train_100y = data[(data['연도'] >= 1906) & (data['연도'] <= 2005)].copy()
+
+    cnt_test = len(test_data)
+    cnt_50y = len(train_50y)
+    cnt_100y = len(train_100y)
+
+    c_t1, c_t2, c_t3 = st.columns(3)
+    
+    with c_t1:
+        st.metric("테스트 데이터", f"{cnt_test}개년")
+        st.markdown("<div class='metric-subtext'>2006~2025년</div>", unsafe_allow_html=True)
+        
+    with c_t2:
+        st.metric("50년 학습 데이터", f"{cnt_50y}개년")
+        st.markdown("<div class='metric-subtext'>1956~2005년 중 조건을 만족한 자료</div>", unsafe_allow_html=True)
+
+    with c_t3:
+        st.metric("100년 학습 데이터", f"{cnt_100y}개년")
+        st.markdown("<div class='metric-subtext'>1906~2005년 중 조건을 만족한 자료</div>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="info-box-blue">
+        두 모델 모두 같은 최근 20년(2006~2025년)을 테스트 데이터로 사용합니다. 따라서 50년을 학습한 모델과 100년을 학습한 모델의 예측 성능을 공정하게 비교할 수 있습니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
     # ==========================================
     # ② 전체 데이터로 만든 회귀모델
     # ==========================================
@@ -97,14 +147,12 @@ try:
     a_all, b_all = np.polyfit(x_all, y_all, 1)
     y_pred_all = a_all * x_all + b_all
 
-    # 지표 계산
     slope_100y_all = a_all * 100
     r_corr = np.corrcoef(x_all, y_all)[0, 1]
     mae_all = mean_absolute_error(y_all, y_pred_all)
     mse_all = mean_squared_error(y_all, y_pred_all)
     r2_all = r2_score(y_all, y_pred_all)
 
-    # 상단 메트릭 요약 (100년당 기온 변화, 상관계수 r, MAE, R², MSE)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("100년당 기온 변화", f"{slope_100y_all:.2f} °C")
     c1.markdown(f"<div class='metric-subtext'>MSE = {mse_all:.3f}</div>", unsafe_allow_html=True)
@@ -112,17 +160,13 @@ try:
     c3.metric("MAE", f"{mae_all:.3f} °C")
     c4.metric("R²", f"{r2_all:.3f}")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 노란색 안내 박스
     st.markdown("""
     <div class="warning-box">
         이 평가는 전체 데이터를 이용해 회귀선을 만든 뒤 같은 데이터를 다시 평가한 결과입니다. 따라서 새로운 데이터에 대한 실제 예측 성능을 평가한 것은 아닙니다.
     </div>
     """, unsafe_allow_html=True)
 
-    # 전체 데이터 회귀 그래프
-    fig_all, ax_all = plt.subplots(figsize=(12, 5), facecolor='white')
+    fig_all, ax_all = plt.subplots(figsize=(12, 4.8), facecolor='white')
     ax_all.set_facecolor('white')
 
     ax_all.scatter(x_all, y_all, color='#2563eb', s=25, label='실제 연평균기온', alpha=0.85)
@@ -133,7 +177,6 @@ try:
     ax_all.set_ylim(9.0, 15.5)
     ax_all.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
 
-    # 축 테두리 심플하게 변경
     for spine in ['top', 'right', 'left', 'bottom']:
         ax_all.spines[spine].set_color('#f3f4f6')
 
@@ -146,11 +189,6 @@ try:
     # ③ 50년 학습과 100년 학습 비교
     # ==========================================
     st.markdown("### ③ 50년 학습과 100년 학습 비교")
-
-    # 데이터 분할
-    test_data = data[(data['연도'] >= 2006) & (data['연도'] <= 2025)].copy()
-    train_50y = data[(data['연도'] >= 1956) & (data['연도'] <= 2005)].copy()
-    train_100y = data[(data['연도'] >= 1906) & (data['연도'] <= 2005)].copy()
 
     # 회귀 모델 학습
     a_50, b_50 = np.polyfit(train_50y['연도'], train_50y['연평균기온'], 1)
@@ -171,7 +209,6 @@ try:
     mse_100 = mean_squared_error(y_test, y_pred_100)
     r2_100 = r2_score(y_test, y_pred_100)
 
-    # 최근 50년 vs 최근 100년 메트릭 비교
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -190,30 +227,11 @@ try:
         n3.metric("MSE", f"{mse_100:.3f}")
         n4.metric("R²", f"{r2_100:.3f}")
 
-    # 두 모델 비교 시각화 그래프
-    fig_comp, ax_comp = plt.subplots(figsize=(12, 5), facecolor='white')
+    fig_comp, ax_comp = plt.subplots(figsize=(12, 4.8), facecolor='white')
     ax_comp.set_facecolor('white')
 
     ax_comp.axvspan(2006, 2025, color='#fee2e2', alpha=0.4, label='테스트 데이터 구간 (2006~2025)')
 
     train_past = data[data['연도'] <= 2005]
     ax_comp.scatter(train_past['연도'], train_past['연평균기온'], color='#94a3b8', s=25, alpha=0.6, label='과거 전체 데이터')
-    ax_comp.scatter(test_data['연도'], test_data['연평균기온'], color='#ef4444', s=35, label='실제 테스트 데이터')
-
-    x_range = np.linspace(1906, 2025, 150)
-    ax_comp.plot(x_range, a_50 * x_range + b_50, color='#2563eb', linewidth=2, label=f'최근 50년 회귀선 (+{a_50*100:.2f}°C/100년)')
-    ax_comp.plot(x_range, a_100 * x_range + b_100, color='#059669', linewidth=2, linestyle='--', label=f'최근 100년 회귀선 (+{a_100*100:.2f}°C/100년)')
-
-    ax_comp.set_ylabel("연평균기온 (°C)", fontsize=10, color='#666666')
-    ax_comp.set_xlabel("연도", fontsize=10, color='#666666')
-    ax_comp.set_ylim(9.0, 15.5)
-    ax_comp.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
-
-    for spine in ['top', 'right', 'left', 'bottom']:
-        ax_comp.spines[spine].set_color('#f3f4f6')
-
-    ax_comp.legend(loc='upper left', frameon=False, fontsize=9)
-    st.pyplot(fig_comp)
-
-except Exception as e:
-    st.error(f"오류가 발생했습니다: {e}")
+    ax_comp.
