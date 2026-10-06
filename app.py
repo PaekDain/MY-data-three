@@ -10,7 +10,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # Streamlit 페이지 설정
 st.set_page_config(page_title="서울 기온 선형회귀 예측기", layout="wide")
 
-# --- 한글 폰트 설정 (폰트 파일 자동 다운로드 및 적용) ---
+# --- 한글 폰트 설정 ---
 @st.cache_resource
 def setup_korean_font():
     font_path = "NanumGothic.ttf"
@@ -37,7 +37,7 @@ def setup_korean_font():
 
 setup_korean_font()
 
-# 커스텀 CSS (안내 박스 및 메트릭 레이아웃)
+# 커스텀 CSS
 st.markdown("""
 <style>
     .stApp {
@@ -80,7 +80,6 @@ def load_and_process_data():
     df['날짜'] = pd.to_datetime(df['날짜'])
     df['연도'] = df['날짜'].dt.year
     
-    # 2025년 이하 데이터만 필터링
     df = df[df['연도'] <= 2025]
     
     yearly_stats = df.groupby('연도').agg(
@@ -99,12 +98,9 @@ try:
     st.caption("서울의 연평균기온으로 선형회귀 모델을 만들고, 과거 자료로 학습한 모델이 최근 기온을 얼마나 잘 예측하는지 평가합니다.")
     st.markdown("---")
 
-    # ==========================================
     # ① 훈련 데이터와 테스트 데이터
-    # ==========================================
     st.markdown("### ① 훈련 데이터와 테스트 데이터")
 
-    # 데이터 분할 및 개수 계산
     test_data = data[(data['연도'] >= 2006) & (data['연도'] <= 2025)].copy()
     train_50y = data[(data['연도'] >= 1956) & (data['연도'] <= 2005)].copy()
     train_100y = data[(data['연도'] >= 1906) & (data['연도'] <= 2005)].copy()
@@ -135,15 +131,12 @@ try:
 
     st.markdown("---")
 
-    # ==========================================
     # ② 전체 데이터로 만든 회귀모델
-    # ==========================================
     st.markdown("### ② 전체 데이터로 만든 회귀모델")
 
     x_all = data['연도'].values
     y_all = data['연평균기온'].values
 
-    # 회귀 모델 (전체 데이터)
     a_all, b_all = np.polyfit(x_all, y_all, 1)
     y_pred_all = a_all * x_all + b_all
 
@@ -185,16 +178,12 @@ try:
 
     st.markdown("---")
 
-    # ==========================================
     # ③ 50년 학습과 100년 학습 비교
-    # ==========================================
     st.markdown("### ③ 50년 학습과 100년 학습 비교")
 
-    # 회귀 모델 학습
     a_50, b_50 = np.polyfit(train_50y['연도'], train_50y['연평균기온'], 1)
     a_100, b_100 = np.polyfit(train_100y['연도'], train_100y['연평균기온'], 1)
 
-    # 테스트 예측 및 평가
     x_test = test_data['연도'].values
     y_test = test_data['연평균기온'].values
 
@@ -234,4 +223,22 @@ try:
 
     train_past = data[data['연도'] <= 2005]
     ax_comp.scatter(train_past['연도'], train_past['연평균기온'], color='#94a3b8', s=25, alpha=0.6, label='과거 전체 데이터')
-    ax_comp.
+    ax_comp.scatter(test_data['연도'], test_data['연평균기온'], color='#ef4444', s=35, label='실제 테스트 데이터')
+
+    x_range = np.linspace(1906, 2025, 150)
+    ax_comp.plot(x_range, a_50 * x_range + b_50, color='#2563eb', linewidth=2, label=f'최근 50년 회귀선 (+{a_50*100:.2f}°C/100년)')
+    ax_comp.plot(x_range, a_100 * x_range + b_100, color='#059669', linewidth=2, linestyle='--', label=f'최근 100년 회귀선 (+{a_100*100:.2f}°C/100년)')
+
+    ax_comp.set_ylabel("연평균기온 (°C)", fontsize=10, color='#666666')
+    ax_comp.set_xlabel("연도", fontsize=10, color='#666666')
+    ax_comp.set_ylim(9.0, 15.5)
+    ax_comp.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
+
+    for spine in ['top', 'right', 'left', 'bottom']:
+        ax_comp.spines[spine].set_color('#f3f4f6')
+
+    ax_comp.legend(loc='upper left', frameon=False, fontsize=9)
+    st.pyplot(fig_comp)
+
+except Exception as e:
+    st.error(f"오류가 발생했습니다: {e}")
