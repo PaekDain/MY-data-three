@@ -10,9 +10,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # Streamlit 페이지 설정
 st.set_page_config(page_title="서울 기온 회귀 모델 평가 및 비교", layout="wide")
 
-# --- 한글 폰트 강제 등록 및 FontProperties 반환 함수 ---
+# --- 한글 폰트 설정 (폰트 파일 자동 다운로드 및 적용) ---
 @st.cache_resource
-def setup_and_get_font():
+def setup_korean_font():
     font_path = "NanumGothic.ttf"
     if not os.path.exists(font_path):
         url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
@@ -22,36 +22,45 @@ def setup_and_get_font():
             pass
 
     if os.path.exists(font_path):
-        # Matplotlib 폰트 매니저에 직접 등록
         fm.fontManager.addfont(font_path)
-        font_prop = fm.FontProperties(fname=font_path)
-        # 전체 기본 폰트로도 설정
-        plt.rcParams['font.family'] = font_prop.get_name()
-        plt.rcParams['axes.unicode_minus'] = False
-        return font_prop
+        plt.rc('font', family='NanumGothic')
     else:
-        plt.rcParams['axes.unicode_minus'] = False
-        return fm.FontProperties()
+        # 시스템 기본 한글 폰트 차선책
+        font_names = [f.name for f in fm.fontManager.ttflist]
+        if 'NanumGothic' in font_names:
+            plt.rc('font', family='NanumGothic')
+        elif 'Malgun Gothic' in font_names:
+            plt.rc('font', family='Malgun Gothic')
+        elif 'AppleGothic' in font_names:
+            plt.rc('font', family='AppleGothic')
 
-font_prop = setup_and_get_font()
+    plt.rcParams['axes.unicode_minus'] = False
 
-# 커스텀 CSS
+setup_korean_font()
+
+# 커스텀 CSS (이미지 스타일의 노란색 경고/안내 박스 디자인 반영)
 st.markdown("""
 <style>
     .stApp {
-        background-color: #fcfbf7;
+        background-color: #ffffff;
     }
-    .main-card {
-        background-color: #f7f5ed;
-        border-radius: 16px;
-        padding: 24px;
-        border: 1px solid #e8e3d5;
-        margin-bottom: 20px;
+    .warning-box {
+        background-color: #fefde8;
+        border-radius: 8px;
+        padding: 16px;
+        color: #854d0e;
+        font-size: 14.5px;
+        line-height: 1.6;
+        margin-top: 10px;
+        margin-bottom: 25px;
+    }
+    .metric-subtext {
+        font-size: 12px;
+        color: #888888;
+        margin-top: -10px;
     }
 </style>
 """, unsafe_allow_html=True)
-
-st.title("🌡️ 서울 연평균 기온 회귀 모델 학습 기간별 비교 평가")
 
 DATA_URL = "https://raw.githubusercontent.com/greatsong/modudata/bb860932644270ad1199f10d3e7670e30231bce4/data/seoul.csv"
 
@@ -70,30 +79,90 @@ def load_and_process_data():
         연평균기온=('평균기온', 'mean')
     ).reset_index()
     
-    # 관측일수가 300일 이상인 해만 필터링
     valid_data = yearly_stats[yearly_stats['관측일수'] >= 300].copy()
     return valid_data
 
 try:
     data = load_and_process_data()
     
-    # --- 데이터셋 분할 ---
+    # ==========================================
+    # ② 전체 데이터로 만든 회귀모델
+    # ==========================================
+    st.markdown("### ② 전체 데이터로 만든 회귀모델")
+
+    x_all = data['연도'].values
+    y_all = data['연평균기온'].values
+
+    # 회귀 모델 (전체 데이터)
+    a_all, b_all = np.polyfit(x_all, y_all, 1)
+    y_pred_all = a_all * x_all + b_all
+
+    # 지표 계산
+    slope_100y_all = a_all * 100
+    r_corr = np.corrcoef(x_all, y_all)[0, 1]
+    mae_all = mean_absolute_error(y_all, y_pred_all)
+    mse_all = mean_squared_error(y_all, y_pred_all)
+    r2_all = r2_score(y_all, y_pred_all)
+
+    # 상단 메트릭 요약 (100년당 기온 변화, 상관계수 r, MAE, R², MSE)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("100년당 기온 변화", f"{slope_100y_all:.2f} °C")
+    c1.markdown(f"<div class='metric-subtext'>MSE = {mse_all:.3f}</div>", unsafe_allow_html=True)
+    c2.metric("상관계수 r", f"{r_corr:.3f}")
+    c3.metric("MAE", f"{mae_all:.3f} °C")
+    c4.metric("R²", f"{r2_all:.3f}")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 노란색 안내 박스
+    st.markdown("""
+    <div class="warning-box">
+        이 평가는 전체 데이터를 이용해 회귀선을 만든 뒤 같은 데이터를 다시 평가한 결과입니다. 따라서 새로운 데이터에 대한 실제 예측 성능을 평가한 것은 아닙니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 전체 데이터 회귀 그래프
+    fig_all, ax_all = plt.subplots(figsize=(12, 5), facecolor='white')
+    ax_all.set_facecolor('white')
+
+    ax_all.scatter(x_all, y_all, color='#2563eb', s=25, label='실제 연평균기온', alpha=0.85)
+    ax_all.plot(x_all, y_pred_all, color='#60a5fa', linewidth=2, label='전체데이터 회귀선')
+
+    ax_all.set_ylabel("연평균기온 (°C)", fontsize=10, color='#666666')
+    ax_all.set_xlabel("연도", fontsize=10, color='#666666')
+    ax_all.set_ylim(9.0, 15.5)
+    ax_all.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
+
+    # 축 테두리 심플하게 변경
+    for spine in ['top', 'right', 'left', 'bottom']:
+        ax_all.spines[spine].set_color('#f3f4f6')
+
+    ax_all.legend(loc='upper right', frameon=False, fontsize=9)
+    st.pyplot(fig_all)
+
+    st.markdown("---")
+
+    # ==========================================
+    # ③ 50년 학습과 100년 학습 비교
+    # ==========================================
+    st.markdown("### ③ 50년 학습과 100년 학습 비교")
+
+    # 데이터 분할
     test_data = data[(data['연도'] >= 2006) & (data['연도'] <= 2025)].copy()
     train_50y = data[(data['연도'] >= 1956) & (data['연도'] <= 2005)].copy()
     train_100y = data[(data['연도'] >= 1906) & (data['연도'] <= 2005)].copy()
 
-    # --- 회귀 모델 학습 ---
+    # 회귀 모델 학습
     a_50, b_50 = np.polyfit(train_50y['연도'], train_50y['연평균기온'], 1)
     a_100, b_100 = np.polyfit(train_100y['연도'], train_100y['연평균기온'], 1)
 
-    # --- 테스트 데이터(2006~2025) 예측 및 평가 ---
+    # 테스트 예측 및 평가
     x_test = test_data['연도'].values
     y_test = test_data['연평균기온'].values
 
     y_pred_50 = a_50 * x_test + b_50
     y_pred_100 = a_100 * x_test + b_100
 
-    # 평가지표 계산
     mae_50 = mean_absolute_error(y_test, y_pred_50)
     mse_50 = mean_squared_error(y_test, y_pred_50)
     r2_50 = r2_score(y_test, y_pred_50)
@@ -102,75 +171,49 @@ try:
     mse_100 = mean_squared_error(y_test, y_pred_100)
     r2_100 = r2_score(y_test, y_pred_100)
 
-    # --- 카드 1: 요약 비교 지표 ---
-    st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.subheader("📌 공통 테스트 데이터 (2006년~2025년) 모델 평가 결과")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("학습 기간", "최근 50년 (1956~2005)", f"기울기 +{a_50*100:.2f}°C/100년")
-    col2.metric("MAE", f"{mae_50:.4f} °C", delta=f"{mae_50 - mae_100:.4f}", delta_color="inverse")
-    col3.metric("MSE", f"{mse_50:.4f}", delta=f"{mse_50 - mse_100:.4f}", delta_color="inverse")
-    col4.metric("R² 점수", f"{r2_50:.4f}", delta=f"{r2_50 - r2_100:.4f}")
+    # 최근 50년 vs 최근 100년 메트릭 비교
+    col_left, col_right = st.columns(2)
 
-    st.markdown("---")
+    with col_left:
+        st.markdown("#### 최근 50년 학습")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("100년당 기온 변화", f"{a_50*100:.2f} °C")
+        m2.metric("MAE", f"{mae_50:.3f} °C")
+        m3.metric("MSE", f"{mse_50:.3f}")
+        m4.metric("R²", f"{r2_50:.3f}")
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("학습 기간", "최근 100년 (1906~2005)", f"기울기 +{a_100*100:.2f}°C/100년")
-    col2.metric("MAE", f"{mae_100:.4f} °C")
-    col3.metric("MSE", f"{mse_100:.4f}")
-    col4.metric("R² 점수", f"{r2_100:.4f}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    with col_right:
+        st.markdown("#### 최근 100년 학습")
+        n1, n2, n3, n4 = st.columns(4)
+        n1.metric("100년당 기온 변화", f"{a_100*100:.2f} °C")
+        n2.metric("MAE", f"{mae_100:.3f} °C")
+        n3.metric("MSE", f"{mse_100:.3f}")
+        n4.metric("R²", f"{r2_100:.3f}")
 
-    # --- 카드 2: 회귀선 시각화 비교 ---
-    st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.subheader("📈 회귀선 예측 결과 및 데이터 구간 시각화")
+    # 두 모델 비교 시각화 그래프
+    fig_comp, ax_comp = plt.subplots(figsize=(12, 5), facecolor='white')
+    ax_comp.set_facecolor('white')
 
-    fig, ax = plt.subplots(figsize=(12, 6), facecolor='#f7f5ed')
-    ax.set_facecolor('#f7f5ed')
+    ax_comp.axvspan(2006, 2025, color='#fee2e2', alpha=0.4, label='테스트 데이터 구간 (2006~2025)')
 
-    # 테스트 구간 음영 (2006~2025)
-    ax.axvspan(2006, 2025, color='#fee2e2', alpha=0.5, label='테스트 데이터 구간 (2006~2025)')
+    train_past = data[data['연도'] <= 2005]
+    ax_comp.scatter(train_past['연도'], train_past['연평균기온'], color='#94a3b8', s=25, alpha=0.6, label='과거 전체 데이터')
+    ax_comp.scatter(test_data['연도'], test_data['연평균기온'], color='#ef4444', s=35, label='실제 테스트 데이터')
 
-    # 데이터 산점도
-    train_all = data[data['연도'] <= 2005]
-    ax.scatter(train_all['연도'], train_all['연평균기온'], color='#94a3b8', s=30, alpha=0.6, label='과거 전체 관측 데이터')
-    ax.scatter(test_data['연도'], test_data['연평균기온'], color='#ef4444', s=45, zorder=4, label='실제 테스트 데이터 (2006~2025)')
+    x_range = np.linspace(1906, 2025, 150)
+    ax_comp.plot(x_range, a_50 * x_range + b_50, color='#2563eb', linewidth=2, label=f'최근 50년 회귀선 (+{a_50*100:.2f}°C/100년)')
+    ax_comp.plot(x_range, a_100 * x_range + b_100, color='#059669', linewidth=2, linestyle='--', label=f'최근 100년 회귀선 (+{a_100*100:.2f}°C/100년)')
 
-    # 회귀선
-    x_range = np.linspace(1906, 2025, 200)
-    ax.plot(x_range, a_50 * x_range + b_50, color='#2563eb', linewidth=2.5, linestyle='-', label=f'최근 50년 학습 회귀선 (+{a_50*100:.2f}°C/100년)')
-    ax.plot(x_range, a_100 * x_range + b_100, color='#059669', linewidth=2.5, linestyle='--', label=f'최근 100년 학습 회귀선 (+{a_100*100:.2f}°C/100년)')
+    ax_comp.set_ylabel("연평균기온 (°C)", fontsize=10, color='#666666')
+    ax_comp.set_xlabel("연도", fontsize=10, color='#666666')
+    ax_comp.set_ylim(9.0, 15.5)
+    ax_comp.grid(True, linestyle=':', alpha=0.4, color='#e5e7eb')
 
-    ax.set_xlim(1900, 2028)
-    ax.set_ylim(9.0, 15.5)
-    
-    # 축 텍스트 폰트 설정
-    ax.set_ylabel("°C", fontproperties=font_prop, fontsize=11, rotation=0, loc='top')
-    ax.set_xlabel("연도", fontproperties=font_prop, fontsize=11, loc='right')
-    ax.grid(True, linestyle=':', alpha=0.6)
-    
-    # 범례(Legend) 폰트 객체를 직접 prop 파라미터로 지정
-    ax.legend(loc='upper left', frameon=True, facecolor='white', framealpha=0.9, prop=font_prop)
+    for spine in ['top', 'right', 'left', 'bottom']:
+        ax_comp.spines[spine].set_color('#f3f4f6')
 
-    st.pyplot(fig)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # --- 카드 3: 평가 분석 보고서 ---
-    st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.subheader("💡 기울기 및 예측 성능 평가 비교 분석")
-    
-    st.markdown(f"""
-    1. **회귀선 기울기 비교**:
-       - **최근 50년 학습 (1956~2005)**: 100년당 **+{a_50*100:.2f}°C** 상승 추세
-       - **최근 100년 학습 (1906~2005)**: 100년당 **+{a_100*100:.2f}°C** 상승 추세
-       - **인사이트**: 최근 50년 데이터로 학습한 모델의 기울기가 더 급격합니다. 이는 20세기 후반 이후 서울의 기온 상승 폭이 가속화되었음을 보여줍니다.
-
-    2. **테스트 데이터 (2006~2025년) 예측 성능 비교**:
-       - 최근 50년 데이터를 학습한 모델이 오차 지표(MAE, MSE)가 더 낮고 $R^2$ 점수가 높아 최근 기온 변화 흐름을 더 정확히 예측합니다.
-       - 최근 100년 모델은 상대적으로 오래된 저기온 관측값이 포함되어 온난화 기울기가 완만하게 측정되므로, 최근 20년의 상승 경향을 낮게 예측하는 경향이 있습니다.
-    """)
-    st.markdown('</div>', unsafe_allow_html=True)
+    ax_comp.legend(loc='upper left', frameon=False, fontsize=9)
+    st.pyplot(fig_comp)
 
 except Exception as e:
-    st.error(f"데이터를 처리하는 중 오류가 발생했습니다: {e}")
+    st.error(f"오류가 발생했습니다: {e}")
