@@ -10,27 +10,30 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # Streamlit 페이지 설정
 st.set_page_config(page_title="서울 기온 회귀 모델 평가 및 비교", layout="wide")
 
-# --- 한글 폰트 직접 다운로드 및 FontProperties 객체 생성 ---
+# --- 한글 폰트 강제 등록 및 FontProperties 반환 함수 ---
 @st.cache_resource
-def get_korean_font_prop():
-    font_path = "NanumBarunGothic.ttf"
+def setup_and_get_font():
+    font_path = "NanumGothic.ttf"
     if not os.path.exists(font_path):
-        url = "https://github.com/google/fonts/raw/main/ofl/nanumbarungothic/NanumBarunGothic.ttf"
+        url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
         try:
             urllib.request.urlretrieve(url, font_path)
         except Exception:
             pass
 
     if os.path.exists(font_path):
+        # Matplotlib 폰트 매니저에 직접 등록
         fm.fontManager.addfont(font_path)
+        font_prop = fm.FontProperties(fname=font_path)
+        # 전체 기본 폰트로도 설정
+        plt.rcParams['font.family'] = font_prop.get_name()
         plt.rcParams['axes.unicode_minus'] = False
-        return fm.FontProperties(fname=font_path)
+        return font_prop
     else:
-        # 시스템 기본 폰트 폴백
         plt.rcParams['axes.unicode_minus'] = False
         return fm.FontProperties()
 
-font_prop = get_korean_font_prop()
+font_prop = setup_and_get_font()
 
 # 커스텀 CSS
 st.markdown("""
@@ -142,14 +145,13 @@ try:
     ax.set_xlim(1900, 2028)
     ax.set_ylim(9.0, 15.5)
     
-    # 각 축 텍스트 및 범례에 fontproperties 지정
+    # 축 텍스트 폰트 설정
     ax.set_ylabel("°C", fontproperties=font_prop, fontsize=11, rotation=0, loc='top')
     ax.set_xlabel("연도", fontproperties=font_prop, fontsize=11, loc='right')
     ax.grid(True, linestyle=':', alpha=0.6)
     
-    legend = ax.legend(loc='upper left', frameon=True, facecolor='white', framealpha=0.9)
-    for text in legend.get_texts():
-        text.set_fontproperties(font_prop)
+    # 범례(Legend) 폰트 객체를 직접 prop 파라미터로 지정
+    ax.legend(loc='upper left', frameon=True, facecolor='white', framealpha=0.9, prop=font_prop)
 
     st.pyplot(fig)
     st.markdown('</div>', unsafe_allow_html=True)
